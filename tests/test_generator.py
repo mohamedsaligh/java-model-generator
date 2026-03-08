@@ -1,196 +1,18 @@
 """Tests for the Java model generator."""
 
-import json
+from pathlib import Path
 
 import pytest
 
 from app.generator.base import generate_models, generate_to_zip
 from app.generator.models import GeneratorConfig, SchemaType
 
-# --- Sample Schemas ---
+# --- Load sample schemas from external files ---
 
-SAMPLE_JSON_SCHEMA = json.dumps({
-    "title": "Order",
-    "type": "object",
-    "required": ["orderId", "customer", "items", "status"],
-    "properties": {
-        "orderId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 50,
-            "pattern": "^ORD-[0-9]+$"
-        },
-        "customer": {
-            "$ref": "#/definitions/Customer"
-        },
-        "items": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "$ref": "#/definitions/OrderItem"
-            }
-        },
-        "status": {
-            "$ref": "#/definitions/OrderStatus"
-        },
-        "totalAmount": {
-            "type": "number",
-            "minimum": 0
-        },
-        "notes": {
-            "type": "string",
-            "maxLength": 500
-        },
-        "createdAt": {
-            "type": "string",
-            "format": "date-time"
-        },
-        "priority": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 5
-        }
-    },
-    "definitions": {
-        "Customer": {
-            "type": "object",
-            "required": ["name", "email"],
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100
-                },
-                "email": {
-                    "type": "string",
-                    "format": "email"
-                },
-                "phone": {
-                    "type": "string",
-                    "pattern": "^\\+?[0-9\\-\\s]+$"
-                },
-                "address": {
-                    "$ref": "#/definitions/Address"
-                }
-            }
-        },
-        "Address": {
-            "type": "object",
-            "required": ["street", "city", "country"],
-            "properties": {
-                "street": {"type": "string", "maxLength": 200},
-                "city": {"type": "string", "maxLength": 100},
-                "state": {"type": "string", "maxLength": 100},
-                "zipCode": {"type": "string", "pattern": "^[0-9]{5}(-[0-9]{4})?$"},
-                "country": {"type": "string", "minLength": 2, "maxLength": 2}
-            }
-        },
-        "OrderItem": {
-            "type": "object",
-            "required": ["productId", "quantity", "unitPrice"],
-            "properties": {
-                "productId": {"type": "string"},
-                "productName": {"type": "string", "maxLength": 200},
-                "quantity": {"type": "integer", "minimum": 1},
-                "unitPrice": {"type": "number", "minimum": 0}
-            }
-        },
-        "OrderStatus": {
-            "type": "string",
-            "enum": ["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"]
-        }
-    }
-})
+_SCHEMAS_DIR = Path(__file__).parent / "schemas"
 
-SAMPLE_XSD = """<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="http://example.com/order"
-           xmlns:tns="http://example.com/order"
-           elementFormDefault="qualified">
-
-    <xs:simpleType name="OrderStatus">
-        <xs:restriction base="xs:string">
-            <xs:enumeration value="PENDING"/>
-            <xs:enumeration value="CONFIRMED"/>
-            <xs:enumeration value="SHIPPED"/>
-            <xs:enumeration value="DELIVERED"/>
-            <xs:enumeration value="CANCELLED"/>
-        </xs:restriction>
-    </xs:simpleType>
-
-    <xs:simpleType name="CurrencyCode">
-        <xs:restriction base="xs:string">
-            <xs:length value="3"/>
-            <xs:pattern value="[A-Z]{3}"/>
-        </xs:restriction>
-    </xs:simpleType>
-
-    <xs:complexType name="Address">
-        <xs:sequence>
-            <xs:element name="street" type="xs:string" minOccurs="1"/>
-            <xs:element name="city" type="xs:string" minOccurs="1"/>
-            <xs:element name="state" type="xs:string" minOccurs="0"/>
-            <xs:element name="zip-code" type="xs:string" minOccurs="1">
-                <xs:simpleType>
-                    <xs:restriction base="xs:string">
-                        <xs:pattern value="[0-9]{5}(-[0-9]{4})?"/>
-                    </xs:restriction>
-                </xs:simpleType>
-            </xs:element>
-            <xs:element name="country" type="xs:string" minOccurs="1"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <xs:complexType name="Customer">
-        <xs:sequence>
-            <xs:element name="customer-id" type="xs:string" minOccurs="1"/>
-            <xs:element name="first-name" type="xs:string" minOccurs="1">
-                <xs:simpleType>
-                    <xs:restriction base="xs:string">
-                        <xs:minLength value="1"/>
-                        <xs:maxLength value="50"/>
-                    </xs:restriction>
-                </xs:simpleType>
-            </xs:element>
-            <xs:element name="last-name" type="xs:string" minOccurs="1"/>
-            <xs:element name="email" type="xs:string" minOccurs="1"/>
-            <xs:element name="billing-address" type="tns:Address" minOccurs="0"/>
-            <xs:element name="shipping-address" type="tns:Address" minOccurs="0"/>
-        </xs:sequence>
-        <xs:attribute name="type" type="xs:string" use="required"/>
-    </xs:complexType>
-
-    <xs:complexType name="OrderItem">
-        <xs:sequence>
-            <xs:element name="product-id" type="xs:string" minOccurs="1"/>
-            <xs:element name="product-name" type="xs:string" minOccurs="1"/>
-            <xs:element name="quantity" type="xs:int" minOccurs="1">
-                <xs:simpleType>
-                    <xs:restriction base="xs:int">
-                        <xs:minInclusive value="1"/>
-                    </xs:restriction>
-                </xs:simpleType>
-            </xs:element>
-            <xs:element name="unit-price" type="xs:decimal" minOccurs="1"/>
-            <xs:element name="currency" type="tns:CurrencyCode" minOccurs="1"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <xs:complexType name="Order">
-        <xs:sequence>
-            <xs:element name="order-id" type="xs:string" minOccurs="1"/>
-            <xs:element name="customer" type="tns:Customer" minOccurs="1"/>
-            <xs:element name="items" type="tns:OrderItem" minOccurs="1" maxOccurs="unbounded"/>
-            <xs:element name="status" type="tns:OrderStatus" minOccurs="1"/>
-            <xs:element name="total-amount" type="xs:decimal" minOccurs="1"/>
-            <xs:element name="order-date" type="xs:dateTime" minOccurs="1"/>
-            <xs:element name="notes" type="xs:string" minOccurs="0"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <xs:element name="Order" type="tns:Order"/>
-</xs:schema>
-"""
+SAMPLE_JSON_SCHEMA = (_SCHEMAS_DIR / "order.json").read_text(encoding="utf-8")
+SAMPLE_XSD = (_SCHEMAS_DIR / "order.xsd").read_text(encoding="utf-8")
 
 
 class TestJsonSchemaGeneration:
@@ -397,3 +219,30 @@ class TestCompilability:
             assert f.file_path.startswith(expected_prefix), (
                 f"File path {f.file_path} doesn't match package"
             )
+
+
+class TestCircularReferences:
+    """Tests to verify circular $ref schemas do not cause infinite recursion."""
+
+    def test_circular_ref_does_not_recurse(self):
+        schema = (_SCHEMAS_DIR / "circular_ref.json").read_text(encoding="utf-8")
+        config = GeneratorConfig(
+            package_name="com.example.tree",
+            schema_type=SchemaType.JSON_SCHEMA,
+        )
+        files = generate_models(schema, config)
+        names = {f.file_name for f in files}
+        assert "TreeNode.java" in names
+        assert "Metadata.java" in names
+
+    def test_circular_ref_produces_valid_code(self):
+        schema = (_SCHEMAS_DIR / "circular_ref.json").read_text(encoding="utf-8")
+        config = GeneratorConfig(
+            package_name="com.example.tree",
+            schema_type=SchemaType.JSON_SCHEMA,
+        )
+        files = generate_models(schema, config)
+        for f in files:
+            opens = f.content.count("{")
+            closes = f.content.count("}")
+            assert opens == closes, f"Unbalanced braces in {f.file_name}"

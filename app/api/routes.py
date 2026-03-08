@@ -9,7 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..generator.base import generate_models, generate_to_directory, generate_to_zip
 from ..generator.models import GeneratedFile, GeneratorConfig, SchemaType
@@ -17,27 +17,85 @@ from ..generator.models import GeneratedFile, GeneratorConfig, SchemaType
 router = APIRouter(prefix="/api/v1", tags=["Java Model Generator"])
 
 
+_EXAMPLE_SCHEMA = """{
+  "title": "User",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "format": "int64" },
+    "username": { "type": "string", "minLength": 3, "maxLength": 50 },
+    "email": { "type": "string", "format": "email" },
+    "roles": { "type": "array", "items": { "type": "string", "enum": ["ADMIN", "USER", "GUEST"] } }
+  },
+  "required": ["id", "username", "email"]
+}"""
+
+
 class GenerateRequest(BaseModel):
-    schema_content: str
-    package_name: str = "com.example.dto"
-    schema_type: SchemaType = SchemaType.JSON_SCHEMA
-    target_path: Optional[str] = None
-    use_lombok: bool = True
-    use_jakarta_validation: bool = True
-    use_builder: bool = True
-    serializable: bool = True
-    json_include_non_null: bool = True
+    """Request body for Java model generation from inline schema content."""
 
+    schema_content: str = Field(
+        ...,
+        description="The schema content (JSON Schema or XSD) as a string.",
+        json_schema_extra={"example": _EXAMPLE_SCHEMA},
+    )
+    package_name: str = Field(
+        default="com.example.dto",
+        description="Java package name for generated classes.",
+        json_schema_extra={"example": "com.example.dto"},
+    )
+    schema_type: SchemaType = Field(
+        default=SchemaType.JSON_SCHEMA,
+        description="Type of the input schema (`json` or `xsd`).",
+    )
+    target_path: Optional[str] = Field(
+        default=None,
+        description="If set, write generated `.java` files to this directory on the server.",
+    )
+    use_lombok: bool = Field(default=True, description="Add Lombok annotations (@Data, @Builder, etc.).")
+    use_jakarta_validation: bool = Field(default=True, description="Add Jakarta validation annotations.")
+    use_builder: bool = Field(default=True, description="Add Lombok @Builder annotation.")
+    serializable: bool = Field(default=True, description="Implement java.io.Serializable.")
+    json_include_non_null: bool = Field(default=True, description="Add @JsonInclude(NON_NULL).")
 
-class GenerateResponse(BaseModel):
-    files: list[GeneratedFileResponse]
-    total_files: int
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "schema_content": _EXAMPLE_SCHEMA,
+                    "package_name": "com.example.dto",
+                    "schema_type": "json",
+                    "use_lombok": True,
+                    "use_jakarta_validation": True,
+                    "use_builder": True,
+                    "serializable": True,
+                    "json_include_non_null": True,
+                }
+            ]
+        }
+    }
 
 
 class GeneratedFileResponse(BaseModel):
-    file_name: str
-    file_path: str
-    content: str
+    """A single generated Java source file."""
+
+    file_name: str = Field(..., description="Java file name.", json_schema_extra={"example": "User.java"})
+    file_path: str = Field(
+        ...,
+        description="Relative path including package directories.",
+        json_schema_extra={"example": "com/example/dto/User.java"},
+    )
+    content: str = Field(
+        ...,
+        description="Full Java source code content.",
+        json_schema_extra={"example": "package com.example.dto;\n\nimport lombok.*;\n\n@Data\npublic class User {\n    private Long id;\n    private String username;\n}"},
+    )
+
+
+class GenerateResponse(BaseModel):
+    """Response containing all generated Java source files."""
+
+    files: list[GeneratedFileResponse] = Field(..., description="List of generated Java source files.")
+    total_files: int = Field(..., description="Total number of generated files.", json_schema_extra={"example": 2})
 
 
 @router.post(

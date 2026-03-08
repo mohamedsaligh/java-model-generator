@@ -28,13 +28,44 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Java Model Generator",
     description=(
-        "Generate Java DTO model classes from XSD, JSON Schema, and other schema formats. "
-        "Supports Lombok annotations, Jakarta validation constraints, and Jackson serialization. "
-        "MCP endpoint available at POST /mcp via JSON-RPC (Streamable HTTP)."
+        "Generate Java DTO model classes from XSD, JSON Schema, and other schema formats.\n\n"
+        "## Features\n"
+        "- **Lombok** annotations (`@Data`, `@Builder`, `@NoArgsConstructor`, `@AllArgsConstructor`)\n"
+        "- **Jakarta Validation** constraints (`@NotNull`, `@Size`, `@Pattern`, etc.)\n"
+        "- **Jackson** serialization (`@JsonProperty`, `@JsonInclude`)\n"
+        "- **Java `implements Serializable`** support\n"
+        "- Safe naming conventions (camelCase fields, PascalCase classes, UPPER_SNAKE enums)\n\n"
+        "## Schema Formats\n"
+        "| Format | Type Value |\n"
+        "|--------|------------|\n"
+        "| JSON Schema | `json` |\n"
+        "| XSD | `xsd` |\n\n"
+        "## MCP Integration\n"
+        "MCP endpoint available at `POST /mcp` via JSON-RPC (Streamable HTTP).\n"
     ),
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "Java Model Generator",
+            "description": "Generate Java DTO model classes from schema definitions.",
+        },
+        {
+            "name": "MCP",
+            "description": "Model Context Protocol endpoints for Claude integration.",
+        },
+        {
+            "name": "Health",
+            "description": "Service health and readiness checks.",
+        },
+    ],
+    contact={
+        "name": "Java Model Generator",
+    },
+    license_info={
+        "name": "MIT",
+    },
     lifespan=lifespan,
 )
 
@@ -116,9 +147,23 @@ async def manifest():
     }
 
 
+@app.get("/swagger", include_in_schema=False)
+async def swagger_redirect():
+    """Redirect /swagger to /docs for convenience."""
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url="/docs")
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy", "service": "java-model-generator", "mcp_endpoint": "/mcp"}
+    return {
+        "status": "healthy",
+        "service": "java-model-generator",
+        "mcp_endpoint": "/mcp",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+    }
 
 
 def run():

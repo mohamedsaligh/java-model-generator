@@ -30,6 +30,8 @@ def parse_json_schema(
     classes: list[JavaClass] = []
     enums: list[JavaEnum] = []
     definitions: dict[str, Any] = {}
+    # Track definitions currently being parsed to prevent circular recursion
+    in_progress: set[str] = set()
 
     # Collect definitions / $defs
     definitions.update(schema.get("definitions", {}))
@@ -37,12 +39,12 @@ def parse_json_schema(
 
     # Parse all definitions first
     for def_name, def_schema in definitions.items():
-        _parse_definition(def_name, def_schema, config, classes, enums, definitions)
+        _parse_definition(def_name, def_schema, config, classes, enums, definitions, in_progress)
 
     # Parse root schema if it defines a type
     root_title = schema.get("title", "Root")
     if schema.get("type") == "object" or "properties" in schema:
-        _parse_object_schema(root_title, schema, config, classes, enums, definitions)
+        _parse_object_schema(root_title, schema, config, classes, enums, definitions, in_progress)
     elif "enum" in schema:
         enum = _parse_enum_schema(root_title, schema, config)
         enums.append(enum)
@@ -57,18 +59,19 @@ def _parse_definition(
     classes: list[JavaClass],
     enums: list[JavaEnum],
     definitions: dict[str, Any],
+    in_progress: set[str],
 ):
     """Parse a single definition from the schema."""
     if "enum" in schema:
         enum = _parse_enum_schema(name, schema, config)
         enums.append(enum)
     elif schema.get("type") == "object" or "properties" in schema:
-        _parse_object_schema(name, schema, config, classes, enums, definitions)
+        _parse_object_schema(name, schema, config, classes, enums, definitions, in_progress)
     elif "allOf" in schema:
-        _parse_allof_schema(name, schema, config, classes, enums, definitions)
+        _parse_allof_schema(name, schema, config, classes, enums, definitions, in_progress)
     elif "oneOf" in schema or "anyOf" in schema:
         # Generate a marker class with an Object field for now
-        _parse_object_schema(name, schema, config, classes, enums, definitions)
+        _parse_object_schema(name, schema, config, classes, enums, definitions, in_progress)
 
 
 def _parse_enum_schema(
@@ -97,13 +100,16 @@ def _parse_object_schema(
     classes: list[JavaClass],
     enums: list[JavaEnum],
     definitions: dict[str, Any],
+    in_progress: set[str],
 ):
     """Parse a JSON Schema object into a JavaClass."""
     class_name = to_pascal_case(name)
 
-    # Avoid duplicates
-    if any(c.name == class_name for c in classes):
+    # Avoid duplicates and circular recursion
+    if any(c.name == class_name for c in classes) or class_name in in_progress:
         return
+
+    in_progress.add(class_name)
 
     properties = schema.get("properties", {})
     required_fields = set(schema.get("required", []))
@@ -121,6 +127,7 @@ def _parse_object_schema(
             definitions,
             class_name,
             inner_enums,
+            in_progress,
         )
         fields.append(field)
 
@@ -144,6 +151,7 @@ def _parse_object_schema(
         inner_enums=inner_enums,
     )
     classes.append(java_class)
+    in_progress.discard(class_name)
 
 
 def _parse_allof_schema(
@@ -153,9 +161,16 @@ def _parse_allof_schema(
     classes: list[JavaClass],
     enums: list[JavaEnum],
     definitions: dict[str, Any],
+    in_progress: set[str],
 ):
     """Parse allOf schema (typically used for inheritance)."""
     class_name = to_pascal_case(name)
+
+    if any(c.name == class_name for c in classes) or class_name in in_progress:
+        return
+
+    in_progress.add(class_name)
+
     parent_class = None
     merged_properties: dict[str, Any] = {}
     merged_required: list[str] = []
@@ -167,7 +182,7 @@ def _parse_allof_schema(
             parent_class = to_pascal_case(ref_name)
             # Ensure parent is parsed
             if ref_name in definitions and not any(c.name == parent_class for c in classes):
-                _parse_definition(ref_name, definitions[ref_name], config, classes, enums, definitions)
+                _parse_definition(ref_name, definitions[ref_name], config, classes, enums, definitions, in_progress)
         else:
             merged_properties.update(sub_schema.get("properties", {}))
             merged_required.extend(sub_schema.get("required", []))
@@ -187,6 +202,7 @@ def _parse_allof_schema(
             definitions,
             class_name,
             inner_enums,
+            in_progress,
         )
         fields.append(field)
 
@@ -199,6 +215,7 @@ def _parse_allof_schema(
         inner_enums=inner_enums,
     )
     classes.append(java_class)
+    in_progress.discard(class_name)
 
 
 def _parse_property(
@@ -211,6 +228,7 @@ def _parse_property(
     definitions: dict[str, Any],
     owner_class: str,
     inner_enums: list[JavaEnum],
+    in_progress: set[str],
 ) -> JavaField:
     """Parse a single JSON Schema property into a JavaField."""
     field_name = to_camel_case(prop_name)
@@ -235,7 +253,7 @@ def _parse_property(
             java_type = to_pascal_case(ref_name)
             # Ensure referenced type is parsed
             if ref_name in definitions and not any(c.name == java_type for c in classes):
-                _parse_definition(ref_name, definitions[ref_name], config, classes, enums, definitions)
+                _parse_definition(ref_name, definitions[ref_name], config, classes, enums, definitions, in_progress)
             return JavaField(
                 name=field_name,
                 java_type=java_type,
@@ -271,7 +289,7 @@ def _parse_property(
         if item_ref:
             item_ref_name = item_ref.rsplit("/", 1)[-1]
             if item_ref_name in definitions:
-                _parse_definition(item_ref_name, definitions[item_ref_name], config, classes, enums, definitions)
+                _parse_definition(item_ref_name, definitions[item_ref_name], config, classes, enums, definitions, in_progress)
 
         # If items has inline enum
         if "enum" in items:
@@ -285,7 +303,7 @@ def _parse_property(
         if items.get("type") == "object" or "properties" in items:
             item_class_name = to_pascal_case(prop_name) + "Item"
             items_with_title = {**items, "title": item_class_name}
-            _parse_object_schema(item_class_name, items_with_title, config, classes, enums, definitions)
+            _parse_object_schema(item_class_name, items_with_title, config, classes, enums, definitions, in_progress)
             item_type = item_class_name
 
         constraints = _extract_constraints(prop_schema, "array", is_required)
@@ -307,7 +325,7 @@ def _parse_property(
     # Handle nested object
     if prop_type == "object" and "properties" in prop_schema:
         nested_class_name = to_pascal_case(prop_name)
-        _parse_object_schema(nested_class_name, prop_schema, config, classes, enums, definitions)
+        _parse_object_schema(nested_class_name, prop_schema, config, classes, enums, definitions, in_progress)
         constraints = JavaFieldConstraint(not_null=is_required, valid=True)
         return JavaField(
             name=field_name,

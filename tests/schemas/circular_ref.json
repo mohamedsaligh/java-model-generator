@@ -1,0 +1,56 @@
+{
+  "title": "TreeNode",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "parent": {
+      "$ref": "#/definitions/TreeNode"
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TreeNode"
+      }
+    },
+    "metadata": {
+      "$ref": "#/definitions/Metadata"
+    }
+  },
+  "definitions": {
+    "TreeNode": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "$ref": "#/definitions/TreeNode"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TreeNode"
+          }
+        },
+        "metadata": {
+          "$ref": "#/definitions/Metadata"
+        }
+      }
+    },
+    "Metadata": {
+      "type": "object",
+      "properties": {
+        "createdBy": {
+          "type": "string"
+        },
+        "node": {
+          "$ref": "#/definitions/TreeNode"
+        }
+      }
+    }
+  }
+}

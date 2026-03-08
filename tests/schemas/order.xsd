@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/order"
+           xmlns:tns="http://example.com/order"
+           elementFormDefault="qualified">
+
+    <xs:simpleType name="OrderStatus">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="PENDING"/>
+            <xs:enumeration value="CONFIRMED"/>
+            <xs:enumeration value="SHIPPED"/>
+            <xs:enumeration value="DELIVERED"/>
+            <xs:enumeration value="CANCELLED"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CurrencyCode">
+        <xs:restriction base="xs:string">
+            <xs:length value="3"/>
+            <xs:pattern value="[A-Z]{3}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="Address">
+        <xs:sequence>
+            <xs:element name="street" type="xs:string" minOccurs="1"/>
+            <xs:element name="city" type="xs:string" minOccurs="1"/>
+            <xs:element name="state" type="xs:string" minOccurs="0"/>
+            <xs:element name="zip-code" type="xs:string" minOccurs="1">
+                <xs:simpleType>
+                    <xs:restriction base="xs:string">
+                        <xs:pattern value="[0-9]{5}(-[0-9]{4})?"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+            <xs:element name="country" type="xs:string" minOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Customer">
+        <xs:sequence>
+            <xs:element name="customer-id" type="xs:string" minOccurs="1"/>
+            <xs:element name="first-name" type="xs:string" minOccurs="1">
+                <xs:simpleType>
+                    <xs:restriction base="xs:string">
+                        <xs:minLength value="1"/>
+                        <xs:maxLength value="50"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+            <xs:element name="last-name" type="xs:string" minOccurs="1"/>
+            <xs:element name="email" type="xs:string" minOccurs="1"/>
+            <xs:element name="billing-address" type="tns:Address" minOccurs="0"/>
+            <xs:element name="shipping-address" type="tns:Address" minOccurs="0"/>
+        </xs:sequence>
+        <xs:attribute name="type" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="OrderItem">
+        <xs:sequence>
+            <xs:element name="product-id" type="xs:string" minOccurs="1"/>
+            <xs:element name="product-name" type="xs:string" minOccurs="1"/>
+            <xs:element name="quantity" type="xs:int" minOccurs="1">
+                <xs:simpleType>
+                    <xs:restriction base="xs:int">
+                        <xs:minInclusive value="1"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:element>
+            <xs:element name="unit-price" type="xs:decimal" minOccurs="1"/>
+            <xs:element name="currency" type="tns:CurrencyCode" minOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Order">
+        <xs:sequence>
+            <xs:element name="order-id" type="xs:string" minOccurs="1"/>
+            <xs:element name="customer" type="tns:Customer" minOccurs="1"/>
+            <xs:element name="items" type="tns:OrderItem" minOccurs="1" maxOccurs="unbounded"/>
+            <xs:element name="status" type="tns:OrderStatus" minOccurs="1"/>
+            <xs:element name="total-amount" type="xs:decimal" minOccurs="1"/>
+            <xs:element name="order-date" type="xs:dateTime" minOccurs="1"/>
+            <xs:element name="notes" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="Order" type="tns:Order"/>
+</xs:schema>
