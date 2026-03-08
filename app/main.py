@@ -80,14 +80,21 @@ app.add_middleware(
 app.include_router(router)
 
 
-@app.api_route("/mcp", methods=["GET", "POST", "DELETE"], include_in_schema=True, tags=["MCP"])
-async def mcp_endpoint(request: Request):
-    """MCP JSON-RPC endpoint (Streamable HTTP transport).
+@app.post("/mcp", tags=["MCP"], summary="Send MCP JSON-RPC request")
+async def mcp_post(request: Request):
+    """Send JSON-RPC requests (initialize, tools/list, tools/call, etc.)."""
+    return await _handle_mcp(request)
 
-    - POST: Send JSON-RPC requests (initialize, tools/list, tools/call, etc.)
-    - GET: Open SSE stream for server-to-client notifications
-    - DELETE: Terminate an MCP session
-    """
+
+@app.get("/mcp", tags=["MCP"], summary="Open MCP SSE stream")
+async def mcp_get(request: Request):
+    """Open SSE stream for server-to-client notifications."""
+    return await _handle_mcp(request)
+
+
+@app.delete("/mcp", tags=["MCP"], summary="Terminate MCP session")
+async def mcp_delete(request: Request):
+    """Terminate an MCP session."""
     return await _handle_mcp(request)
 
 
