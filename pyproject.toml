@@ -1,0 +1,25 @@
+[project]
+name = "java-model-generator"
+version = "1.0.0"
+description = "Generate Java DTO models from XSD, JSON Schema, and other schema formats"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+    "lxml>=5.0.0",
+    "pydantic>=2.0.0",
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+java-model-generator = "app.main:run"
+java-model-generator-mcp = "app.mcp_server:main"
